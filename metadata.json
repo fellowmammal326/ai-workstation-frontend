@@ -1,0 +1,5 @@
+{
+  "name": "AI Workstation with desktop control",
+  "description": "An AI chatbot assistant with a virtual workstation to perform tasks like writing documents and browsing the web.",
+  "requestFramePermissions": []
+}
