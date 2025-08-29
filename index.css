@@ -997,6 +997,101 @@ body.show-toast::after {
     background-color: #e04f56;
 }
 
+/* Auth Modal Specific Styles */
+.auth-modal-content {
+    max-width: 400px;
+}
+.auth-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--bg-tertiary);
+}
+.auth-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+}
+.auth-tab.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+.auth-body {
+    padding: 1.5rem;
+}
+.auth-form.hidden {
+    display: none;
+}
+.form-group {
+    margin-bottom: 1rem;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: 1rem;
+}
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(97, 218, 251, 0.3);
+}
+.error-message {
+    color: var(--error-color);
+    font-size: 0.875rem;
+    min-height: 1.2em;
+    margin-bottom: 1rem;
+}
+.auth-button {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--accent-primary);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.auth-button:hover {
+    background-color: #4fc3f7;
+}
+
+/* User Display and Logout Button */
+#user-display {
+    color: var(--text-secondary);
+    margin-right: 1rem;
+    font-size: 0.9rem;
+}
+#user-display strong {
+    color: var(--text-primary);
+}
+#user-display.hidden, #logout-button.hidden {
+    display: none;
+}
+#logout-button {
+    background-color: var(--error-color);
+    color: white;
+}
+#logout-button:hover {
+    background-color: #e04f56;
+}
+
 /* Testing Mode Styles */
 #testing-mode-indicator {
     background-color: var(--accent-secondary);

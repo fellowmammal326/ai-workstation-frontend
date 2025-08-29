@@ -11,21 +11,63 @@
 <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.15.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "@vercel/kv": "https://aistudiocdn.com/@vercel/kv@^3.0.0",
+    "express": "https://aistudiocdn.com/express@^5.1.0"
   }
 }
 </script>
 </head>
 <body>
-    <div id="app-container">
+    <div id="auth-modal" class="modal-overlay" style="display: flex;">
+        <div class="modal-content auth-modal-content">
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="signup">Sign Up</button>
+            </div>
+            <div class="modal-body auth-body">
+                <!-- Login Form -->
+                <form id="login-form" class="auth-form">
+                    <div class="form-group">
+                        <label for="login-username">Username</label>
+                        <input type="text" id="login-username" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required autocomplete="current-password">
+                    </div>
+                    <p id="login-error" class="error-message"></p>
+                    <button type="submit" class="auth-button">Login</button>
+                </form>
+                <!-- Sign Up Form -->
+                <form id="signup-form" class="auth-form hidden">
+                    <div class="form-group">
+                        <label for="signup-username">Username</label>
+                        <input type="text" id="signup-username" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" required autocomplete="new-password">
+                    </div>
+                    <p id="signup-error" class="error-message"></p>
+                    <button type="submit" class="auth-button">Sign Up</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
         <aside id="chat-panel">
             <header>
                 <div class="header-main-row">
                     <h1 id="app-title">AI Assistant</h1>
                     <div id="session-controls">
+                        <span id="user-display" class="hidden"></span>
                         <span id="testing-mode-indicator" class="hidden" title="Click to disable Testing Mode">🧪 Testing Mode</span>
                         <button id="save-button" title="Save current session state">Save</button>
                         <button id="load-button" title="Load a saved session">Load</button>
+                        <button id="logout-button" class="hidden">Logout</button>
                     </div>
                 </div>
                 <div id="storage-indicator">
