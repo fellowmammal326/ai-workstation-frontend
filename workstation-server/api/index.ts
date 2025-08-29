@@ -1,5 +1,5 @@
-// Fix: Use `import * as express` and explicit `express.` prefixes for types to avoid conflicts with global types.
-import * as express from 'express';
+// Fix: Use explicit types from 'express' to avoid conflicts with global types.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
 import { kv } from '@vercel/kv';
@@ -115,7 +115,7 @@ const responseSchema = {
 
 // Health Check Endpoint
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.get('/health', (req: express.Request, res: express.Response) => {
+app.get('/health', (req: Request, res: Response) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -127,7 +127,7 @@ app.get('/health', (req: express.Request, res: express.Response) => {
 
 // === Middleware to get user from header using Vercel KV ===
 // Fix: Use express.Request, express.Response, and express.NextFunction to avoid type conflicts.
-const getUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const getUser = async (req: Request, res: Response, next: NextFunction) => {
     // Allow signup and login routes to pass through
     if (req.path === '/signup' || req.path === '/login') {
         return next();
@@ -159,7 +159,7 @@ app.use(getUser);
 // --- Auth Routes ---
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/signup', async (req: express.Request, res: express.Response) => {
+app.post('/signup', async (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password are required.' });
@@ -188,7 +188,7 @@ app.post('/signup', async (req: express.Request, res: express.Response) => {
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/login', async (req: express.Request, res: express.Response) => {
+app.post('/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -211,14 +211,14 @@ app.post('/login', async (req: express.Request, res: express.Response) => {
 // --- File Routes ---
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.get('/files', async (req: express.Request, res: express.Response) => {
+app.get('/files', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     res.json(user!.files);
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/files', async (req: express.Request, res: express.Response) => {
+app.post('/files', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { type, name, content } = req.body as { type: 'documents' | 'images', name: string, content: string };
     if (!['documents', 'images'].includes(type) || !name || content === undefined) {
@@ -234,7 +234,7 @@ app.post('/files', async (req: express.Request, res: express.Response) => {
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.delete('/files/:type/:name', async (req: express.Request, res: express.Response) => {
+app.delete('/files/:type/:name', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { type, name } = req.params;
     const user = await kv.get<UserData>(username);
@@ -255,14 +255,14 @@ app.delete('/files/:type/:name', async (req: express.Request, res: express.Respo
 // --- Session Routes ---
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.get('/sessions', async (req: express.Request, res: express.Response) => {
+app.get('/sessions', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     res.json(user!.sessions);
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/sessions', async (req: express.Request, res: express.Response) => {
+app.post('/sessions', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const sessionState = req.body;
     const sessionId = `session_${Date.now()}`;
@@ -276,7 +276,7 @@ app.post('/sessions', async (req: express.Request, res: express.Response) => {
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.get('/sessions/:id', async (req: express.Request, res: express.Response) => {
+app.get('/sessions/:id', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { id } = req.params;
 
@@ -289,7 +289,7 @@ app.get('/sessions/:id', async (req: express.Request, res: express.Response) => 
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.delete('/sessions/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/sessions/:id', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { id } = req.params;
 
@@ -307,7 +307,7 @@ app.delete('/sessions/:id', async (req: express.Request, res: express.Response) 
 // --- Storage Route ---
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.get('/storage', async (req: express.Request, res: express.Response) => {
+app.get('/storage', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     
@@ -322,7 +322,7 @@ app.get('/storage', async (req: express.Request, res: express.Response) => {
 
 // --- AI Routes (Secure Backend) ---
 // Fix: Use express.Request, express.Response, and express.NextFunction to avoid type conflicts.
-const checkAiService = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkAiService = (req: Request, res: Response, next: NextFunction) => {
     if (!ai) {
         return res.status(503).json({ message: `AI service is unavailable. Server-side error: ${aiInitializationError}` });
     }
@@ -330,7 +330,7 @@ const checkAiService = (req: express.Request, res: express.Response, next: expre
 };
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/ai/chat', checkAiService, async (req: express.Request, res: express.Response) => {
+app.post('/ai/chat', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -353,7 +353,7 @@ app.post('/ai/chat', checkAiService, async (req: express.Request, res: express.R
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/ai/generate-image', checkAiService, async (req: express.Request, res: express.Response) => {
+app.post('/ai/generate-image', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -373,7 +373,7 @@ app.post('/ai/generate-image', checkAiService, async (req: express.Request, res:
 });
 
 // Fix: Use express.Request and express.Response to avoid type conflicts.
-app.post('/ai/google-search', checkAiService, async (req: express.Request, res: express.Response) => {
+app.post('/ai/google-search', checkAiService, async (req: Request, res: Response) => {
     try {
         const { query } = req.body;
         if (!query) {
