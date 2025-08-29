@@ -1,58 +1,39 @@
-# AI Workstation - Vercel Backend Server
+# AI Workstation - Local Backend Server
 
-This is the backend server for the AI Workstation application. It's built with Node.js and Express, and has been re-architected to run as a **serverless function on Vercel**.
+This is the backend server for the AI Workstation application. It's built with Node.js and Express and is designed to run locally on your machine.
 
-It uses **Vercel KV** (a serverless Redis database) for persistent storage of user accounts, files, and sessions. This means your data will be safe and you no longer need to run a local server process.
+**IMPORTANT:** This server uses **in-memory storage**. This means any user accounts, saved files, or sessions will be **lost** when the server is stopped or restarted.
 
-## Deployment to Vercel
-
-Follow these steps to deploy your backend and connect it to a persistent database.
+## Local Development
 
 ### Prerequisites
 
-*   You have an account on [Vercel](https://vercel.com).
-*   You have [Node.js](https://nodejs.org/) installed locally.
-*   You have installed the Vercel CLI: `npm install -g vercel`.
+*   You have [Node.js](https://nodejs.org/) and npm installed.
 
-### Step 1: Link Your Project to Vercel
+### Step 1: Set Your Gemini API Key
 
-1.  Navigate to the root directory of this project (the one containing `index.html`).
-2.  Run the following command to link your local project to a new or existing Vercel project:
-    ```bash
-    vercel link
+The server needs a Gemini API key to function.
+
+1.  Create a new file named `.env` inside this `workstation-server` directory.
+2.  Add the following line to the `.env` file, replacing `YOUR_API_KEY` with your actual key:
     ```
-    Follow the prompts from the Vercel CLI.
-
-### Step 2: Create and Link Vercel KV Store
-
-1.  Go to your project's dashboard on the Vercel website.
-2.  Navigate to the **Storage** tab.
-3.  Click **Create Database** and select **KV (Redis)**. Choose a region and create the database.
-4.  Once the KV store is created, click **Connect**. It will show you environment variables. You don't need to copy them manually.
-5.  In your local terminal (still in the project root), run the following command to pull the environment variables and link the KV store to your project:
-    ```bash
-    vercel env pull .env.development.local
+    API_KEY=YOUR_API_KEY
     ```
-    This creates a local environment file so you can run the app locally with `vercel dev` if you wish.
 
-### Step 3: Set Your Gemini API Key
+### Step 2: Install Dependencies
 
-You need to add your Gemini `API_KEY` as a secret environment variable in Vercel.
-
-Run this command in your terminal:
+Navigate to this directory in your terminal and run:
 
 ```bash
-vercel env add API_KEY
+npm install
 ```
 
-Paste your API key when prompted. This will securely store your key and make it available to the serverless function.
+### Step 3: Run the Server
 
-### Step 4: Deploy
-
-You're all set! To deploy your application to production, run:
+To start the server in development mode (with automatic reloading on changes), run:
 
 ```bash
-vercel --prod
+npm start
 ```
 
-Vercel will build both the frontend and the backend, deploy them, and provide you with a live URL. Your user accounts and data will now be stored permanently in your Vercel KV database.
+The server will be running on `http://localhost:10000`. The frontend application is already configured to connect to this address.

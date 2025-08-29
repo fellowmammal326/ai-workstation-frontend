@@ -4,14 +4,14 @@
     "module": "commonjs",
     "target": "es6",
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": [
-    "api/**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules"

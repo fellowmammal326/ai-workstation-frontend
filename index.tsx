@@ -4,8 +4,8 @@
  */
 
 // --- IMPORTANT DEPLOYMENT STEP ---
-// This is now a relative path to work with the Vercel serverless backend.
-const API_BASE_URL = '';
+// This is the base URL for the local backend server.
+const API_BASE_URL = 'http://localhost:10000';
 
 // --- API Client ---
 // A centralized place for all communication with the backend server.
