@@ -1,4 +1,3 @@
-
 # AI Workstation - Backend Server
 
 This is the backend server for the AI Workstation application. It's built with Node.js, Express, and TypeScript.
@@ -26,4 +25,4 @@ To start the development server, run the following command:
 npm start
 ```
 
-The server will start and listen on `http://localhost:3000`.
+The server will start and listen on `http://localhost:10000`.

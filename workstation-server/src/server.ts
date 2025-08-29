@@ -1,8 +1,5 @@
-// FIX: The `import = require()` syntax for Express is not compatible with the current module system.
-// It has been replaced with the standard ES module import `import express from 'express'`, and explicit types
-// `Request`, `Response`, and `NextFunction` are imported to resolve type errors throughout the file.
-// FIX: Aliased Request and Response to avoid clashes with global DOM types.
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express';
+// FIX: Replaced aliased express Request/Response types (ExpressRequest, ExpressResponse) with direct imports (Request, Response) to resolve widespread type errors throughout the file.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
 
@@ -124,7 +121,7 @@ const userData: {
 // === Public Routes (No Auth Required) ===
 
 // Health Check Endpoint
-app.get('/api/health', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/health', (req: Request, res: Response) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -137,7 +134,7 @@ app.get('/api/health', (req: ExpressRequest, res: ExpressResponse) => {
 // === Middleware to get user from header (INSECURE DEMO) ===
 // In a real app, you would use JWTs or a proper session middleware.
 // This is a simple, insecure way to identify the user for the demo.
-const getUser = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+const getUser = (req: Request, res: Response, next: NextFunction) => {
     // Allow signup and login routes to pass through without the header
     if (req.path === '/api/signup' || req.path === '/api/login') {
         return next();
@@ -158,7 +155,7 @@ app.use(getUser);
 
 // --- Auth Routes ---
 
-app.post('/api/signup', (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/signup', (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password are required.' });
@@ -176,7 +173,7 @@ app.post('/api/signup', (req: ExpressRequest, res: ExpressResponse) => {
   res.status(201).json({ message: 'User created successfully!' });
 });
 
-app.post('/api/login', (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/login', (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -192,12 +189,12 @@ app.post('/api/login', (req: ExpressRequest, res: ExpressResponse) => {
 
 // --- File Routes ---
 
-app.get('/api/files', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/files', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     res.json(userData[username].files);
 });
 
-app.post('/api/files', (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/files', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { type, name, content } = req.body as { type: 'documents' | 'images', name: string, content: string };
     if (!['documents', 'images'].includes(type) || !name || content === undefined) {
@@ -208,7 +205,7 @@ app.post('/api/files', (req: ExpressRequest, res: ExpressResponse) => {
     res.status(201).json({ message: 'File saved successfully.' });
 });
 
-app.delete('/api/files/:type/:name', (req: ExpressRequest, res: ExpressResponse) => {
+app.delete('/api/files/:type/:name', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { type, name } = req.params;
     if (type !== 'documents' && type !== 'images') {
@@ -224,12 +221,12 @@ app.delete('/api/files/:type/:name', (req: ExpressRequest, res: ExpressResponse)
 
 // --- Session Routes ---
 
-app.get('/api/sessions', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/sessions', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     res.json(userData[username].sessions);
 });
 
-app.post('/api/sessions', (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/sessions', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const sessionState = req.body;
     const sessionId = `session_${Date.now()}`;
@@ -238,7 +235,7 @@ app.post('/api/sessions', (req: ExpressRequest, res: ExpressResponse) => {
     res.status(201).json({ message: 'Session saved successfully.' });
 });
 
-app.get('/api/sessions/:id', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/sessions/:id', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { id } = req.params;
     const session = userData[username].sessions[id];
@@ -248,7 +245,7 @@ app.get('/api/sessions/:id', (req: ExpressRequest, res: ExpressResponse) => {
     res.json(session);
 });
 
-app.delete('/api/sessions/:id', (req: ExpressRequest, res: ExpressResponse) => {
+app.delete('/api/sessions/:id', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { id } = req.params;
     if (!userData[username].sessions[id]) {
@@ -261,7 +258,7 @@ app.delete('/api/sessions/:id', (req: ExpressRequest, res: ExpressResponse) => {
 
 // --- Storage Route ---
 
-app.get('/api/storage', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/storage', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     // This is an approximation of storage size.
     const userStorageString = JSON.stringify({
@@ -273,14 +270,14 @@ app.get('/api/storage', (req: ExpressRequest, res: ExpressResponse) => {
 });
 
 // --- AI Routes (Secure Backend) ---
-const checkAiService = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+const checkAiService = (req: Request, res: Response, next: NextFunction) => {
     if (!ai) {
         return res.status(503).json({ message: `AI service is unavailable. Server-side error: ${aiInitializationError}` });
     }
     next();
 };
 
-app.post('/api/ai/chat', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/chat', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -302,7 +299,7 @@ app.post('/api/ai/chat', checkAiService, async (req: ExpressRequest, res: Expres
     }
 });
 
-app.post('/api/ai/generate-image', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/generate-image', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -321,7 +318,7 @@ app.post('/api/ai/generate-image', checkAiService, async (req: ExpressRequest, r
     }
 });
 
-app.post('/api/ai/google-search', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/google-search', checkAiService, async (req: Request, res: Response) => {
     try {
         const { query } = req.body;
         if (!query) {
