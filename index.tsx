@@ -5,7 +5,7 @@
 
 // --- IMPORTANT DEPLOYMENT STEP ---
 // Replace this URL with the live URL of your deployed backend server.
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = 'http://localhost:10000';
 
 // --- API Client ---
 // A centralized place for all communication with the backend server.
