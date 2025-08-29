@@ -95,8 +95,6 @@ const testingModeIndicator = document.getElementById('testing-mode-indicator')!;
 const debugButton = document.getElementById('debug-button')!;
 const debugConsole = document.getElementById('debug-console')!;
 const closeDebugConsoleBtn = document.getElementById('close-debug-console-btn')!;
-const runDiagnosticsBtn = document.getElementById('run-diagnostics-btn') as HTMLButtonElement;
-const diagnosticsOutput = document.getElementById('diagnostics-output')!;
 
 
 // --- State ---
@@ -1426,47 +1424,6 @@ const renderLoadSessionModal = async () => {
     }
 };
 
-// --- Debug Tool ---
-
-const runDiagnostics = async () => {
-    diagnosticsOutput.innerHTML = '';
-    const log = (message: string, isSuccess: boolean) => {
-        const status = isSuccess ? '✅ SUCCESS' : '❌ FAILED';
-        diagnosticsOutput.innerHTML += `<p class="${isSuccess ? 'success' : 'error'}">${status}: ${message}</p>`;
-    };
-
-    runDiagnosticsBtn.disabled = true;
-    diagnosticsOutput.innerHTML = '<p class="info">Running diagnostics...</p>';
-
-    // 1. Frontend Check
-    log(`Frontend is configured to make relative API calls (e.g., /api/health), which is correct for Vercel deployment.`, true);
-    
-    // 2. Backend Connectivity & AI Status
-    try {
-        const response = await fetch(`/api/health`);
-        if (!response.ok) {
-            throw new Error(`Server responded with status ${response.status}`);
-        }
-        const healthData = await response.json();
-        log('Backend serverless function is reachable and responding.', true);
-
-        // 3. AI Status from backend
-        if (healthData.aiStatus === 'ok') {
-            log('Backend connection to Gemini AI is OK.', true);
-        } else {
-            log('Backend connection to Gemini AI has failed.', false);
-            log(`Server Error: <code>${healthData.aiError}</code>. This is the most likely cause of the "load failed" error. Please ensure the API_KEY environment variable is set correctly in your Vercel project settings.`, false);
-        }
-
-    } catch (error) {
-        log(`Backend serverless function is not reachable at <code>/api/health</code>.`, false);
-        log(`Error: <code>${(error as Error).message}</code>`, false);
-        log('Please ensure the application is deployed correctly on Vercel and that there are no build errors.', false);
-    } finally {
-        runDiagnosticsBtn.disabled = false;
-    }
-};
-
 // --- Event Listeners ---
 chatInput.addEventListener('input', () => {
     chatInput.style.height = 'auto';
@@ -1529,7 +1486,6 @@ debugButton.addEventListener('click', () => {
 closeDebugConsoleBtn.addEventListener('click', () => {
     debugConsole.classList.add('hidden');
 });
-runDiagnosticsBtn.addEventListener('click', runDiagnostics);
 
 // Make debug console draggable
 makeDraggable(debugConsole);

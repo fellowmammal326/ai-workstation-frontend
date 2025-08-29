@@ -1,5 +1,5 @@
-// Fix: Aliased express types to avoid conflicts with global types.
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
+// Fix: Use direct express types to avoid conflicts with global types.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
 import { kv } from '@vercel/kv';
@@ -114,7 +114,7 @@ const responseSchema = {
 // === Public Routes (No Auth Required) ===
 
 // Health Check Endpoint
-app.get('/api/health', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/health', (req: Request, res: Response) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -125,7 +125,7 @@ app.get('/api/health', (req: ExpressRequest, res: ExpressResponse) => {
 
 
 // === Middleware to get user from header using Vercel KV ===
-const getUser = async (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
+const getUser = async (req: Request, res: Response, next: NextFunction) => {
     // Allow signup and login routes to pass through
     if (req.path === '/api/signup' || req.path === '/api/login') {
         return next();
@@ -156,7 +156,7 @@ app.use(getUser);
 
 // --- Auth Routes ---
 
-app.post('/api/signup', async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/signup', async (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password are required.' });
@@ -184,7 +184,7 @@ app.post('/api/signup', async (req: ExpressRequest, res: ExpressResponse) => {
   }
 });
 
-app.post('/api/login', async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -206,13 +206,13 @@ app.post('/api/login', async (req: ExpressRequest, res: ExpressResponse) => {
 
 // --- File Routes ---
 
-app.get('/api/files', async (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/files', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     res.json(user!.files);
 });
 
-app.post('/api/files', async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/files', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { type, name, content } = req.body as { type: 'documents' | 'images', name: string, content: string };
     if (!['documents', 'images'].includes(type) || !name || content === undefined) {
@@ -227,7 +227,7 @@ app.post('/api/files', async (req: ExpressRequest, res: ExpressResponse) => {
     res.status(201).json({ message: 'File saved successfully.' });
 });
 
-app.delete('/api/files/:type/:name', async (req: ExpressRequest, res: ExpressResponse) => {
+app.delete('/api/files/:type/:name', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { type, name } = req.params;
     const user = await kv.get<UserData>(username);
@@ -247,13 +247,13 @@ app.delete('/api/files/:type/:name', async (req: ExpressRequest, res: ExpressRes
 
 // --- Session Routes ---
 
-app.get('/api/sessions', async (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/sessions', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     res.json(user!.sessions);
 });
 
-app.post('/api/sessions', async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/sessions', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const sessionState = req.body;
     const sessionId = `session_${Date.now()}`;
@@ -266,7 +266,7 @@ app.post('/api/sessions', async (req: ExpressRequest, res: ExpressResponse) => {
     res.status(201).json({ message: 'Session saved successfully.' });
 });
 
-app.get('/api/sessions/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/sessions/:id', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { id } = req.params;
 
@@ -278,7 +278,7 @@ app.get('/api/sessions/:id', async (req: ExpressRequest, res: ExpressResponse) =
     res.json(session);
 });
 
-app.delete('/api/sessions/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const { id } = req.params;
 
@@ -295,7 +295,7 @@ app.delete('/api/sessions/:id', async (req: ExpressRequest, res: ExpressResponse
 
 // --- Storage Route ---
 
-app.get('/api/storage', async (req: ExpressRequest, res: ExpressResponse) => {
+app.get('/api/storage', async (req: Request, res: Response) => {
     const { username } = (req as any);
     const user = await kv.get<UserData>(username);
     
@@ -309,14 +309,14 @@ app.get('/api/storage', async (req: ExpressRequest, res: ExpressResponse) => {
 });
 
 // --- AI Routes (Secure Backend) ---
-const checkAiService = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
+const checkAiService = (req: Request, res: Response, next: NextFunction) => {
     if (!ai) {
         return res.status(503).json({ message: `AI service is unavailable. Server-side error: ${aiInitializationError}` });
     }
     next();
 };
 
-app.post('/api/ai/chat', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/chat', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -338,7 +338,7 @@ app.post('/api/ai/chat', checkAiService, async (req: ExpressRequest, res: Expres
     }
 });
 
-app.post('/api/ai/generate-image', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/generate-image', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
@@ -357,7 +357,7 @@ app.post('/api/ai/generate-image', checkAiService, async (req: ExpressRequest, r
     }
 });
 
-app.post('/api/ai/google-search', checkAiService, async (req: ExpressRequest, res: ExpressResponse) => {
+app.post('/api/ai/google-search', checkAiService, async (req: Request, res: Response) => {
     try {
         const { query } = req.body;
         if (!query) {
