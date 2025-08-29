@@ -379,7 +379,7 @@ const openAppViaIcon = async (appId: string, iconSelector: string): Promise<HTML
             setActiveWindow(windowEl);
             return windowEl;
         }
-    } 
+    }
     else if (appId === 'docs') {
         const existingNewDoc = Array.from(openWindows.values()).find(w => w.dataset.app === 'docs' && !openFiles.has(w));
         if (existingNewDoc) {
@@ -658,12 +658,12 @@ const executeActionSequence = async (sequence: any[]) => {
     }
 };
 
-const openDocumentWriter = (file: { name: string, content: string } | null = null) => {
+const openDocumentWriter = (file: { name: string, content: string } | null = null): HTMLElement => {
     if (file) {
         for (const [win, fileInfo] of openFiles.entries()) {
             if (fileInfo.type === 'docs' && fileInfo.name === file.name) {
                 setActiveWindow(win);
-                return;
+                return win;
             }
         }
     }
@@ -694,11 +694,13 @@ const openDocumentWriter = (file: { name: string, content: string } | null = nul
             windowEl.querySelector('.window-title')!.textContent = `📝 ${currentFilename}`;
         }
     });
+    return windowEl;
 };
-const openBrowser = () => {
+const openBrowser = (): HTMLElement => {
     if(openWindows.has('browser')) {
-        setActiveWindow(openWindows.get('browser')!);
-        return;
+        const win = openWindows.get('browser')!;
+        setActiveWindow(win);
+        return win;
     }
     const windowEl = createAppWindow('🌐 Web Browser', '', 'browser', true);
     openWindows.set('browser', windowEl);
@@ -750,6 +752,7 @@ const openBrowser = () => {
         }
     });
     searchButton.addEventListener('click', performSearch);
+    return windowEl;
 };
 const renderSearchResults = (windowEl: HTMLElement) => {
     const state = browserState.get(windowEl);
@@ -932,8 +935,9 @@ const useImageStudio = async (prompt: string) => {
 };
 const openImageStudio = (): HTMLElement => {
     if(openWindows.has('studio')) {
-        setActiveWindow(openWindows.get('studio')!);
-        return openWindows.get('studio')!;
+        const win = openWindows.get('studio')!;
+        setActiveWindow(win);
+        return win;
     }
     const windowEl = createAppWindow('🖼️ Image Studio', '', 'studio');
     openWindows.set('studio', windowEl);
@@ -985,7 +989,7 @@ const openImageViewer = (name: string, content: string) => {
         openImageStudioWithContent(name, content);
     }
 };
-const openImageStudioWithContent = (name: string, content: string) => {
+const openImageStudioWithContent = (name: string, content: string): HTMLElement => {
     const windowEl = openImageStudio();
     setActiveWindow(windowEl);
     const imageContainer = windowEl.querySelector('.image-container')!;
@@ -994,6 +998,7 @@ const openImageStudioWithContent = (name: string, content: string) => {
     imageContainer.innerHTML = `<img src="${content}" alt="${name}">`;
     openFiles.set(windowEl, { type: 'studio', name });
     windowEl.querySelector('.window-title')!.textContent = `🖼️ ${name}`;
+    return windowEl;
 };
 const renderExplorer = async (windowEl: HTMLElement) => {
     const body = windowEl.querySelector('.window-body')! as HTMLElement;
@@ -1073,12 +1078,12 @@ const renderExplorer = async (windowEl: HTMLElement) => {
         });
     });
 };
-const openFileExplorer = async () => {
+const openFileExplorer = async (): Promise<HTMLElement> => {
     let windowEl = openWindows.get('explorer');
     if (windowEl) {
         setActiveWindow(windowEl);
         await renderExplorer(windowEl);
-        return;
+        return windowEl;
     }
     windowEl = createAppWindow('📁 File Explorer', '', 'explorer', true);
     openWindows.set('explorer', windowEl);
@@ -1102,6 +1107,7 @@ const openFileExplorer = async () => {
             await renderExplorer(windowEl!);
         });
     });
+    return windowEl;
 };
 const createAppWindow = (title: string, content: string, app: string, noPadding = false) => {
     const windowEl = document.createElement('div');
@@ -1306,23 +1312,16 @@ const loadSession = async (sessionId: string) => {
         chatHistory.innerHTML = state.chatHistory || '';
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        state.openWindows.forEach((winData: any) => {
+        for (const winData of state.openWindows) {
             let windowEl: HTMLElement | undefined;
             switch(winData.app) {
-                 case 'docs':
-                    if (winData.fileInfo) {
-                        openDocumentWriter({ name: winData.fileInfo.name, content: winData.content });
-                    } else {
-                        openDocumentWriter();
-                    }
-                    // This is brittle, but there's no easy way to get the window created by openDocumentWriter
-                    windowEl = Array.from(openWindows.values()).pop(); 
+                case 'docs':
+                    windowEl = openDocumentWriter(winData.fileInfo ? { name: winData.fileInfo.name, content: winData.content } : null);
                     if (windowEl) windowEl.querySelector('.window-body')!.innerHTML = winData.content;
                     break;
                 case 'browser':
-                    openBrowser();
-                    windowEl = openWindows.get('browser');
-                    if (windowEl && winData.browserState) {
+                    windowEl = openBrowser();
+                    if (winData.browserState) {
                         browserState.set(windowEl, winData.browserState);
                         if(winData.browserState.query) {
                            renderSearchResults(windowEl);
@@ -1332,11 +1331,9 @@ const loadSession = async (sessionId: string) => {
                 case 'doodle':
                     windowEl = openDoodlePad(); // Create the window first
                     if (winData.fileInfo) {
-                        // It's a saved file, update title and state
                         openFiles.set(windowEl, winData.fileInfo);
                         windowEl.querySelector('.window-title')!.textContent = `🎨 ${winData.fileInfo.name}`;
                     }
-                    // Whether saved or not, draw the content from the session
                     const canvas = windowEl.querySelector('canvas');
                     const ctx = canvas?.getContext('2d');
                     if (canvas && ctx && winData.content.startsWith('data:image/png')) {
@@ -1347,16 +1344,14 @@ const loadSession = async (sessionId: string) => {
                     break;
                 case 'studio':
                     if(winData.fileInfo) {
-                        openImageStudioWithContent(winData.fileInfo.name, winData.content.match(/src="([^"]+)"/)?.[1] || '');
+                        windowEl = openImageStudioWithContent(winData.fileInfo.name, winData.content.match(/src="([^"]+)"/)?.[1] || '');
                     } else {
-                        openImageStudio();
+                        windowEl = openImageStudio();
                     }
-                    windowEl = openWindows.get('studio');
                     if(windowEl) windowEl.querySelector('.image-container')!.innerHTML = winData.content;
                     break;
-                 case 'explorer':
-                    openFileExplorer();
-                    windowEl = openWindows.get('explorer');
+                case 'explorer':
+                    windowEl = await openFileExplorer();
                     break;
             }
             if (windowEl) {
@@ -1364,10 +1359,9 @@ const loadSession = async (sessionId: string) => {
                 windowEl.style.top = winData.top;
                 windowEl.style.width = winData.width;
                 windowEl.style.height = winData.height;
-                // fileInfo is already set for doodle, this might override. Let's keep it generic.
                 if(winData.fileInfo && !openFiles.has(windowEl)) openFiles.set(windowEl, winData.fileInfo);
             }
-        });
+        }
         
         loadSessionModal.style.display = 'none';
         showToast("Session loaded.");
