@@ -1,4 +1,4 @@
-// Fix: Explicitly import Request, Response, and NextFunction from express to avoid type conflicts with global types.
+// Fix: Import Request, Response, and NextFunction types from express to avoid conflicts with global types.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { kv } from '@vercel/kv';
@@ -13,7 +13,7 @@ const defaultDb = {
 };
 
 // Signup Endpoint
-// Fix: Use imported Request and Response types for correct typing.
+// Fix: Use Request and Response types from express.
 app.post('/signup', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -40,7 +40,7 @@ app.post('/signup', async (req: Request, res: Response) => {
 });
 
 // Login Endpoint
-// Fix: Use imported Request and Response types for correct typing.
+// Fix: Use Request and Response types from express.
 app.post('/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -61,7 +61,7 @@ app.post('/login', async (req: Request, res: Response) => {
 });
 
 // Middleware for authenticating data requests
-// Fix: Use imported Request, Response, and NextFunction types for correct typing.
+// Fix: Use Request, Response, and NextFunction types from express.
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const username = req.headers['x-username'] as string;
     if (!username) {
@@ -73,7 +73,7 @@ const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Endpoint to save/update user data
-// Fix: Use imported Request and Response types for correct typing.
+// Fix: Use Request and Response types from express.
 app.post('/data', authMiddleware, async (req: Request, res: Response) => {
     const username = (req as any).username;
     const newDb = req.body;
