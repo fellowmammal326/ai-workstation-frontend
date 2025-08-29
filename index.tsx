@@ -82,32 +82,47 @@ const responseSchema = {
   required: ["sequence"],
 };
 
-// --- API Client & State ---
-const API_BASE_URL = '/api';
-let userDatabase: any | null = null; // Local cache of the user's data from the server
+// --- Local Storage Client ---
+const USER_ACCOUNTS_KEY = 'ai_workstation_users';
+const DB_PREFIX = 'ai_workstation_data_';
+const getDbKey = () => {
+    if (!currentUser) return null;
+    return `${DB_PREFIX}${currentUser}`;
+}
 
-const syncDatabaseWithBackend = async () => {
-    if (!currentUser || !userDatabase) return;
+const getDatabase = () => {
+    const defaultDb = {
+        files: { documents: {} as Record<string, { content: string, modified: number }>, images: {} as Record<string, { content: string, modified: number }> },
+        sessions: {} as Record<string, any>,
+    };
+    const key = getDbKey();
+    if (!key) return defaultDb; // Return default if no user is logged in
     try {
-        const response = await fetch(`${API_BASE_URL}/data`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Username': currentUser,
-            },
-            body: JSON.stringify(userDatabase),
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to sync data with server.');
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Basic validation to prevent loading corrupted data
+            if (parsed.files && parsed.sessions) {
+                return parsed;
+            }
         }
-        await updateStorageIndicator();
-    } catch (error) {
-        console.error("Error syncing database:", error);
-        showToast(`Sync Error: ${(error as Error).message}`);
+        return defaultDb;
+    } catch (e) {
+        console.error("Error reading from localStorage:", e);
+        return defaultDb; // Return a clean slate if parsing fails
     }
 };
 
+const saveDatabase = (db: any) => {
+    const key = getDbKey();
+    if (!key) return; // Don't save if no user is logged in
+    try {
+        localStorage.setItem(key, JSON.stringify(db));
+    } catch (e) {
+        console.error("Error writing to localStorage:", e);
+        showToast("Error: Could not save data. Storage might be full.");
+    }
+};
 
 // --- DOM Elements ---
 const authModal = document.getElementById('auth-modal')!;
@@ -208,12 +223,13 @@ const formatBytes = (bytes: number): string => {
 
 const updateStorageIndicator = async () => {
     try {
-        if (!currentUser || !userDatabase) { // Handle logged out state
+        const key = getDbKey();
+        if (!key) { // Handle logged out state
              storageBarInner.style.width = `0%`;
              storageText.textContent = `N/A`;
              return;
         }
-        const dbString = JSON.stringify(userDatabase);
+        const dbString = localStorage.getItem(key) || '';
         const used = new Blob([dbString]).size;
         const percentage = (used / MAX_STORAGE) * 100;
 
@@ -235,9 +251,8 @@ const updateStorageIndicator = async () => {
 
 // --- App Initialization ---
 
-const initializeAppForUser = (username: string, database: any) => {
+const initializeAppForUser = (username: string) => {
     currentUser = username;
-    userDatabase = database;
 
     // Update UI for logged-in state
     authModal.style.display = 'none';
@@ -262,7 +277,6 @@ const logoutUser = () => {
     
     // Reset state variables
     currentUser = null;
-    userDatabase = null;
     
     // Update UI for logged-out state
     appContainer.classList.add('hidden');
@@ -1279,20 +1293,20 @@ const showToast = (message: string) => {
     }, 3000);
 };
 
-// --- File & Session Management (API-backed) ---
+// --- File & Session Management (localStorage-backed) ---
 
 const getFiles = async () => {
-    if (!userDatabase) return { documents: {}, images: {} };
-    return Promise.resolve(userDatabase.files);
+    return Promise.resolve(getDatabase().files);
 };
 
 const saveFile = async (type: 'documents' | 'images', name: string, content: string) => {
-    if (!userDatabase) return;
     try {
-        userDatabase.files[type][name] = { content, modified: Date.now() };
-        await syncDatabaseWithBackend();
+        const db = getDatabase();
+        db.files[type][name] = { content, modified: Date.now() };
+        saveDatabase(db);
         showToast(`Saved as ${name}`);
         addMessage('assistant', `Saved ${type.slice(0, -1)} as "${name}"`);
+        updateStorageIndicator();
     } catch (error) {
         const errorMessage = (error as Error).message;
         console.error("Error saving file:", error);
@@ -1302,14 +1316,15 @@ const saveFile = async (type: 'documents' | 'images', name: string, content: str
 };
 
 const deleteFile = async (type: string, name: string) => {
-    if (!userDatabase) return;
     try {
+        const db = getDatabase();
         if (type === 'documents' || type === 'images') {
-             delete userDatabase.files[type][name];
+             delete db.files[type][name];
         }
-        await syncDatabaseWithBackend();
+        saveDatabase(db);
         showToast(`Deleted ${name}`);
         addMessage('assistant', `Deleted ${type.slice(0, -1)}: "${name}"`);
+        updateStorageIndicator();
     } catch (error) {
         console.error("Error deleting file:", error);
         showToast(`Could not delete file: ${(error as Error).message}`);
@@ -1317,16 +1332,16 @@ const deleteFile = async (type: string, name: string) => {
 };
 
 const saveSession = async () => {
-    if (!userDatabase) return;
     const state = {
         openWindows: Array.from(openWindows.entries()).map(([key, win]) => {
             const body = win.querySelector('.window-body')!;
             let content = body.innerHTML; // Default content is the innerHTML
 
+            // Special handling for doodle pad to save canvas content
             if (win.dataset.app === 'doodle') {
                 const canvas = win.querySelector('canvas');
                 if (canvas) {
-                    content = canvas.toDataURL();
+                    content = canvas.toDataURL(); // Save the drawing as a base64 image string
                 }
             }
 
@@ -1338,7 +1353,7 @@ const saveSession = async () => {
                 top: win.style.top,
                 width: win.style.width,
                 height: win.style.height,
-                content: content,
+                content: content, // This will be either HTML or a dataURL for the canvas
                 fileInfo: openFiles.get(win),
                 browserState: browserState.get(win)
             };
@@ -1346,9 +1361,10 @@ const saveSession = async () => {
         chatHistory: chatHistory.innerHTML,
     };
     try {
+        const db = getDatabase();
         const sessionId = `session_${Date.now()}`;
-        userDatabase.sessions[sessionId] = state;
-        await syncDatabaseWithBackend();
+        db.sessions[sessionId] = state;
+        saveDatabase(db);
         showToast("Session saved!");
     } catch (error) {
         console.error("Error saving session:", error);
@@ -1357,10 +1373,10 @@ const saveSession = async () => {
 };
 
 const loadSession = async (sessionId: string) => {
-    if (!userDatabase) return;
     try {
-        const state = userDatabase.sessions[sessionId];
-        if (!state) throw new Error("Session not found.");
+        const db = getDatabase();
+        const state = db.sessions[sessionId];
+        if (!state) throw new Error("Session not found in local storage.");
         
         initializeAppState();
         chatHistory.innerHTML = state.chatHistory || '';
@@ -1383,7 +1399,7 @@ const loadSession = async (sessionId: string) => {
                     }
                     break;
                 case 'doodle':
-                    windowEl = openDoodlePad();
+                    windowEl = openDoodlePad(); // Create the window first
                     if (winData.fileInfo) {
                         openFiles.set(windowEl, winData.fileInfo);
                         windowEl.querySelector('.window-title')!.textContent = `🎨 ${winData.fileInfo.name}`;
@@ -1393,7 +1409,7 @@ const loadSession = async (sessionId: string) => {
                     if (canvas && ctx && winData.content.startsWith('data:image/png')) {
                         const img = new Image();
                         img.onload = () => ctx.drawImage(img, 0, 0);
-                        img.src = winData.content;
+                        img.src = winData.content; // Load the drawing from dataURL
                     }
                     break;
                 case 'studio':
@@ -1426,10 +1442,10 @@ const loadSession = async (sessionId: string) => {
 };
 
 const deleteSession = async (sessionId: string) => {
-    if (!userDatabase) return;
     try {
-        delete userDatabase.sessions[sessionId];
-        await syncDatabaseWithBackend();
+        const db = getDatabase();
+        delete db.sessions[sessionId];
+        saveDatabase(db);
         await renderLoadSessionModal();
     } catch (error) {
         console.error("Error deleting session:", error);
@@ -1438,9 +1454,9 @@ const deleteSession = async (sessionId: string) => {
 };
 
 const renderLoadSessionModal = async () => {
-    if (!userDatabase) return;
     try {
-        const sessions = userDatabase.sessions;
+        const db = getDatabase();
+        const sessions = db.sessions;
         const sortedSessions = Object.entries(sessions).sort((a, b) => {
             return parseInt(b[0].split('_')[1]) - parseInt(a[0].split('_')[1]);
         });
@@ -1466,7 +1482,7 @@ const renderLoadSessionModal = async () => {
 };
 
 // --- Auth Logic ---
-const handleSignup = async (e: Event) => {
+const handleSignup = (e: Event) => {
     e.preventDefault();
     const username = signupUsernameInput.value.trim();
     const password = signupPasswordInput.value.trim();
@@ -1478,29 +1494,25 @@ const handleSignup = async (e: Event) => {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/signup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            signupErrorEl.textContent = result.message;
+        const accountsStr = localStorage.getItem(USER_ACCOUNTS_KEY) || '{}';
+        const accounts = JSON.parse(accountsStr);
+
+        if (accounts[username]) {
+            signupErrorEl.textContent = 'Username already exists.';
             return;
         }
+
+        accounts[username] = password; // NOTE: In a real app, hash the password!
+        localStorage.setItem(USER_ACCOUNTS_KEY, JSON.stringify(accounts));
         
-        // Auto-login the user with a fresh database
-        initializeAppForUser(username, {
-            files: { documents: {}, images: {} },
-            sessions: {},
-        });
+        initializeAppForUser(username);
     } catch (error) {
         console.error("Signup error:", error);
         signupErrorEl.textContent = 'An unexpected error occurred.';
     }
 };
 
-const handleLogin = async (e: Event) => {
+const handleLogin = (e: Event) => {
     e.preventDefault();
     const username = loginUsernameInput.value.trim();
     const password = loginPasswordInput.value.trim();
@@ -1512,18 +1524,15 @@ const handleLogin = async (e: Event) => {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            loginErrorEl.textContent = result.message;
+        const accountsStr = localStorage.getItem(USER_ACCOUNTS_KEY) || '{}';
+        const accounts = JSON.parse(accountsStr);
+
+        if (!accounts[username] || accounts[username] !== password) {
+            loginErrorEl.textContent = 'Invalid username or password.';
             return;
         }
 
-        initializeAppForUser(username, result.data);
+        initializeAppForUser(username);
     } catch (error) {
         console.error("Login error:", error);
         loginErrorEl.textContent = 'An unexpected error occurred.';
