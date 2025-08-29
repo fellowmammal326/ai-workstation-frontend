@@ -4,8 +4,8 @@
  */
 
 // --- IMPORTANT DEPLOYMENT STEP ---
-// Replace this URL with the live URL of your deployed backend server.
-const API_BASE_URL = 'http://localhost:10000';
+// This is now a relative path to work with the Vercel serverless backend.
+const API_BASE_URL = '';
 
 // --- API Client ---
 // A centralized place for all communication with the backend server.
@@ -1439,33 +1439,29 @@ const runDiagnostics = async () => {
     diagnosticsOutput.innerHTML = '<p class="info">Running diagnostics...</p>';
 
     // 1. Frontend Check
-    const isUrlCorrect = API_BASE_URL === 'http://localhost:10000';
-    log(`Frontend API_BASE_URL is set to <code>${API_BASE_URL}</code>.`, isUrlCorrect);
-    if (!isUrlCorrect) {
-        log('The API URL should be <code>http://localhost:10000</code> to match the server.', false);
-    }
-
+    log(`Frontend is configured to make relative API calls (e.g., /api/health), which is correct for Vercel deployment.`, true);
+    
     // 2. Backend Connectivity & AI Status
     try {
-        const response = await fetch(`${API_BASE_URL}/api/health`);
+        const response = await fetch(`/api/health`);
         if (!response.ok) {
             throw new Error(`Server responded with status ${response.status}`);
         }
         const healthData = await response.json();
-        log('Backend server is reachable and responding.', true);
+        log('Backend serverless function is reachable and responding.', true);
 
         // 3. AI Status from backend
         if (healthData.aiStatus === 'ok') {
             log('Backend connection to Gemini AI is OK.', true);
         } else {
             log('Backend connection to Gemini AI has failed.', false);
-            log(`Server Error: <code>${healthData.aiError}</code>. This is the most likely cause of the "load failed" error. Please ensure the API_KEY is set correctly on the server.`, false);
+            log(`Server Error: <code>${healthData.aiError}</code>. This is the most likely cause of the "load failed" error. Please ensure the API_KEY environment variable is set correctly in your Vercel project settings.`, false);
         }
 
     } catch (error) {
-        log(`Backend server is not reachable at <code>${API_BASE_URL}/api/health</code>.`, false);
+        log(`Backend serverless function is not reachable at <code>/api/health</code>.`, false);
         log(`Error: <code>${(error as Error).message}</code>`, false);
-        log('Please ensure the backend server is running on the correct port (10000) and that there are no network issues.', false);
+        log('Please ensure the application is deployed correctly on Vercel and that there are no build errors.', false);
     } finally {
         runDiagnosticsBtn.disabled = false;
     }
