@@ -1,5 +1,5 @@
-// Fix: Change import to default express import to avoid type conflicts with global Request/Response.
-import express from 'express';
+// Fix: Explicitly import Request, Response, and NextFunction from express to avoid type conflicts with global types.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { kv } from '@vercel/kv';
 
@@ -13,8 +13,8 @@ const defaultDb = {
 };
 
 // Signup Endpoint
-// Fix: Use express.Request and express.Response for correct typing.
-app.post('/api/signup', async (req: express.Request, res: express.Response) => {
+// Fix: Use imported Request and Response types for correct typing.
+app.post('/signup', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -40,8 +40,8 @@ app.post('/api/signup', async (req: express.Request, res: express.Response) => {
 });
 
 // Login Endpoint
-// Fix: Use express.Request and express.Response for correct typing.
-app.post('/api/login', async (req: express.Request, res: express.Response) => {
+// Fix: Use imported Request and Response types for correct typing.
+app.post('/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -61,8 +61,8 @@ app.post('/api/login', async (req: express.Request, res: express.Response) => {
 });
 
 // Middleware for authenticating data requests
-// Fix: Use express.Request, express.Response, and express.NextFunction for correct typing.
-const authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Fix: Use imported Request, Response, and NextFunction types for correct typing.
+const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
     const username = req.headers['x-username'] as string;
     if (!username) {
         return res.status(401).json({ message: 'Unauthorized: Missing X-Username header.' });
@@ -73,8 +73,8 @@ const authMiddleware = (req: express.Request, res: express.Response, next: expre
 };
 
 // Endpoint to save/update user data
-// Fix: Use express.Request and express.Response for correct typing.
-app.post('/api/data', authMiddleware, async (req: express.Request, res: express.Response) => {
+// Fix: Use imported Request and Response types for correct typing.
+app.post('/data', authMiddleware, async (req: Request, res: Response) => {
     const username = (req as any).username;
     const newDb = req.body;
 
