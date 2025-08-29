@@ -3,17 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI, Type, Chat } from "@google/genai";
-
 // --- IMPORTANT DEPLOYMENT STEP ---
 // Replace this URL with the live URL of your deployed backend server.
 const API_BASE_URL = 'http://localhost:3000';
-
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // --- API Client ---
 // A centralized place for all communication with the backend server.
@@ -55,6 +47,11 @@ const apiClient = {
 
     // Storage
     getStorageUsage: () => apiClient.request('/api/storage'),
+
+    // AI Methods
+    chat: (prompt: string) => apiClient.request('/api/ai/chat', { method: 'POST', body: JSON.stringify({ prompt }) }),
+    generateImage: (prompt: string) => apiClient.request('/api/ai/generate-image', { method: 'POST', body: JSON.stringify({ prompt }) }),
+    googleSearch: (query: string) => apiClient.request('/api/ai/google-search', { method: 'POST', body: JSON.stringify({ query }) }),
 };
 
 // --- DOM Elements ---
@@ -102,7 +99,6 @@ let openFiles = new Map<HTMLElement, { type: 'docs' | 'doodle' | 'studio', name:
 const browserState = new Map<HTMLElement, { query: string, sources: any[], summary: string }>();
 let clipboard: { type: string, data: string } | null = null;
 let currentUser: { username: string } | null = null;
-let chat: Chat | null = null;
 const MAX_STORAGE = 10 * 1024 * 1024; // This is now just a frontend display constant
 let isTestingMode = false;
 
@@ -193,15 +189,6 @@ const initializeAppState = () => {
     cursor.style.top = '100px';
     clipboard = null;
     disableTestingMode();
-    chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-            // FIX: systemInstruction should be a string, not a Content object.
-            systemInstruction: systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema,
-        }
-    });
 };
 
 const loginUser = (username: string) => {
@@ -219,7 +206,6 @@ const loginUser = (username: string) => {
 const logoutUser = () => {
     sessionStorage.removeItem('currentUser');
     currentUser = null;
-    chat = null;
 
     appContainer.classList.add('hidden');
     authModal.style.display = 'flex';
@@ -321,74 +307,6 @@ const getDesktopState = (): string => {
 };
 
 // --- High-level actions, AI prompt, execution logic ---
-// ... (omitted for brevity, no major changes other than calling new async data functions)
-// ... The entire section from `systemInstruction` to `executeActionSequence` has been updated
-// ... to call the new async `getFiles`, `saveFile`, `deleteFile` functions where needed.
-const systemInstruction = `You are an AI assistant with a virtual workstation. You can control a virtual mouse cursor to interact with applications on the desktop.
-With every request, you will receive the current state of the desktop, including desktop dimensions and details for all open windows (ID, title, position, size). Use this information to understand what's on the screen and where to position items. The user's request will follow the desktop state.
-Your primary role is to find and display information for the user, not to narrate it back to them in the chat. Use the browser to find information and leave the results on the screen for the user to read. Use the 'speak' action to explain your steps, not to deliver the final answer.
-Your response MUST be a JSON object with a single key "sequence", which is an array of action objects. Do not add any extra text or markdown.
-To resize a window, move the mouse to its maximize/restore button (selector: '#window-id .maximize-btn') and click it.
-Available actions:
-1.  {"action": "speak", "text": "string"}: Say something to the user in the chat to explain what you're doing.
-2.  {"action": "move_mouse_to_element", "selector": "#element-id"}: Move the mouse cursor to the center of a given DOM element with a natural, curved motion.
-3.  {"action": "click"}: Simulate a left mouse click at the current cursor position. This will focus the clicked element (like an input field).
-4.  {"action": "type", "text": "string", "enter": boolean (optional)}: Types text into the currently active window's focused element. The Document Writer supports rich text and images.
-5.  {"action": "scroll", "selector": "string", "pixels": number}: Scrolls a specific element (like a window body) down by a certain number of pixels. The selector must point to the scrollable element.
-6.  {"action": "doodle", "lines": [[[x,y], [x,y], ...], [[x,y], ...]]}: A high-level action that opens the doodle pad and draws a series of lines.
-7.  {"action": "draw_with_cursor", "lines": [[[x,y], [x,y], ...]]}: Move the cursor along a specific path on the desktop for expressive gestures.
-8.  {"action": "generate_image", "prompt": "string"}: Opens the Image Studio and generates an image from the given text prompt. The generated image is automatically copied to the clipboard.
-9.  {"action": "find_image", "prompt": "string"}: A high-level action that generates an image in the background (without opening a window) and copies it to the clipboard, ready to be placed.
-10. {"action": "place_image_in_doc"}: Places the image from the clipboard into the Document Writer app.
-11. {"action": "list_files"}: Opens the File Explorer to show all saved files.
-12. {"action": "open_file", "filename": "string"}: Opens a file from the file system.
-13. {"action": "save_active_file", "filename": "string"}: Saves the content of the currently active window with the given filename.
-14. {"action": "delete_file", "filename": "string"}: Deletes a file from the file system.
-15. {"action": "drag_window", "selector": "#window-id", "x": number, "y": number}: Drags a window to a new position on the desktop. The coordinates are relative to the top-left of the desktop.
-Example Task: "Make the document window fullscreen."
-Assuming desktop state shows: Open Windows: - Window ID: #window-docs-12345, Title: "📝 New Document", Maximized: false
-{ "sequence": [
-    {"action": "speak", "text": "Okay, I'll make the document window fullscreen."},
-    {"action": "move_mouse_to_element", "selector": "#window-docs-12345 .maximize-btn"},
-    {"action": "click"}
-]}`;
-const responseSchema = {
-  type: Type.OBJECT,
-  properties: {
-    sequence: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          action: { type: Type.STRING },
-          text: { type: Type.STRING, nullable: true },
-          selector: { type: Type.STRING, nullable: true },
-          query: { type: Type.STRING, nullable: true },
-          prompt: { type: Type.STRING, nullable: true },
-          filename: { type: Type.STRING, nullable: true },
-          enter: { type: Type.BOOLEAN, nullable: true },
-          pixels: { type: Type.NUMBER, nullable: true },
-          x: { type: Type.NUMBER, nullable: true },
-          y: { type: Type.NUMBER, nullable: true },
-          lines: {
-            type: Type.ARRAY,
-            nullable: true,
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.NUMBER,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-  required: ["sequence"],
-};
 const addMessage = (sender: 'user' | 'assistant', text: string, thinking = false) => {
   const messageEl = document.createElement('div');
   messageEl.classList.add('chat-message', sender);
@@ -404,7 +322,7 @@ const addMessage = (sender: 'user' | 'assistant', text: string, thinking = false
 };
 const handleUserInput = async () => {
   const prompt = chatInput.value.trim();
-  if (!prompt || !chat || isTestingMode) return;
+  if (!prompt || isTestingMode) return;
   addMessage('user', prompt);
   chatInput.value = '';
   chatInput.style.height = 'auto';
@@ -413,8 +331,8 @@ const handleUserInput = async () => {
   try {
     const desktopState = getDesktopState();
     const fullPrompt = `DESKTOP STATE:\n${desktopState}\n\nUSER REQUEST:\n${prompt}`;
-    const response = await chat.sendMessage({ message: fullPrompt });
-    const decisionText = response.text.trim();
+    const response = await apiClient.chat(fullPrompt);
+    const { decision: decisionText } = await response.json();
     const decision = JSON.parse(decisionText);
     thinkingMessage.remove();
     if (decision.sequence) {
@@ -663,13 +581,9 @@ const executeActionSequence = async (sequence: any[]) => {
                 break;
             case 'find_image':
                 try {
-                    const response = await ai.models.generateImages({
-                        model: 'imagen-4.0-generate-001',
-                        prompt: action.prompt,
-                        config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
-                    });
-                    if (response.generatedImages && response.generatedImages.length > 0) {
-                        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+                    const response = await apiClient.generateImage(action.prompt);
+                    const { base64ImageBytes } = await response.json();
+                    if (base64ImageBytes) {
                         const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
                         clipboard = { type: 'image', data: imageUrl };
                     }
@@ -844,13 +758,8 @@ const openBrowser = () => {
         if (!query) return;
         browserContent.innerHTML = `<div class="placeholder"><div class="spinner"></div>Searching for "${query}"...</div>`;
         try {
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: `Summarize information about "${query}" from the web.`,
-                config: { tools: [{ googleSearch: {} }] },
-            });
-            const summary = response.text;
-            const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+            const response = await apiClient.googleSearch(query);
+            const { summary, sources } = await response.json();
             browserState.set(windowEl, { query, sources, summary });
             renderSearchResults(windowEl);
         } catch (error) {
@@ -1023,13 +932,10 @@ const useImageStudio = async (prompt: string) => {
     promptDisplay.textContent = `Prompt: "${prompt}"`;
     imageContainer.innerHTML = `<div class="spinner"></div><p>Generating image...</p>`;
     try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: prompt,
-            config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
-        });
-        if (response.generatedImages && response.generatedImages.length > 0) {
-            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+        const response = await apiClient.generateImage(prompt);
+        const { base64ImageBytes } = await response.json();
+
+        if (base64ImageBytes) {
             const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
             imageContainer.innerHTML = `<img src="${imageUrl}" alt="${prompt}">`;
             clipboard = { type: 'image', data: imageUrl };
