@@ -2,65 +2,125 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
+import { GoogleGenAI, Type } from '@google/genai';
 
-// --- IMPORTANT DEPLOYMENT STEP ---
-// This is the base URL for the local backend server.
-const API_BASE_URL = 'http://localhost:10000';
+// --- AI Initialization & Configuration ---
+let ai: GoogleGenAI;
+let aiInitializationError: string | null = null;
+try {
+    // The user's API key is sourced from the environment.
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+} catch (e: any) {
+    aiInitializationError = e.message || 'An unknown error occurred during AI initialization.';
+    console.error("!!! GEMINI AI INITIALIZATION FAILED !!!");
+    console.error(aiInitializationError);
+}
 
-// --- API Client ---
-// A centralized place for all communication with the backend server.
-const apiClient = {
-    // Helper to handle fetch requests and errors
-    async request(endpoint: string, options: RequestInit = {}) {
-        const headers = new Headers(options.headers || {});
-        headers.set('Content-Type', 'application/json');
-        
-        // Add the current user's username to the headers for authenticated requests
-        // NOTE: This is an insecure method for demonstration. A real app would use JWTs.
-        if (currentUser) {
-            headers.set('X-Username', currentUser.username);
-        }
-
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: response.statusText }));
-            throw new Error(errorData.message || 'An unknown API error occurred');
-        }
-        return response;
+const systemInstruction = `You are an AI assistant with a virtual workstation. You can control a virtual mouse cursor to interact with applications on the desktop.
+With every request, you will receive the current state of the desktop, including desktop dimensions and details for all open windows (ID, title, position, size). Use this information to understand what's on the screen and where to position items. The user's request will follow the desktop state.
+Your primary role is to find and display information for the user, not to narrate it back to them in the chat. Use the browser to find information and leave the results on the screen for the user to read. Use the 'speak' action to explain your steps, not to deliver the final answer.
+Your response MUST be a JSON object with a single key "sequence", which is an array of action objects. Do not add any extra text or markdown.
+To resize a window, move the mouse to its maximize/restore button (selector: '#window-id .maximize-btn') and click it.
+Available actions:
+1.  {"action": "speak", "text": "string"}: Say something to the user in the chat to explain what you're doing.
+2.  {"action": "move_mouse_to_element", "selector": "#element-id"}: Move the mouse cursor to the center of a given DOM element with a natural, curved motion.
+3.  {"action": "click"}: Simulate a left mouse click at the current cursor position. This will focus the clicked element (like an input field).
+4.  {"action": "type", "text": "string", "enter": boolean (optional)}: Types text into the currently active window's focused element. The Document Writer supports rich text and images.
+5.  {"action": "scroll", "selector": "string", "pixels": number}: Scrolls a specific element (like a window body) down by a certain number of pixels. The selector must point to the scrollable element.
+6.  {"action": "doodle", "lines": [[[x,y], [x,y], ...], [[x,y], ...]]}: A high-level action that opens the doodle pad and draws a series of lines.
+7.  {"action": "draw_with_cursor", "lines": [[[x,y], [x,y], ...]]}: Move the cursor along a specific path on the desktop for expressive gestures.
+8.  {"action": "generate_image", "prompt": "string"}: Opens the Image Studio and generates an image from the given text prompt. The generated image is automatically copied to the clipboard.
+9.  {"action": "find_image", "prompt": "string"}: A high-level action that generates an image in the background (without opening a window) and copies it to the clipboard, ready to be placed.
+10. {"action": "place_image_in_doc"}: Places the image from the clipboard into the Document Writer app.
+11. {"action": "list_files"}: Opens the File Explorer to show all saved files.
+12. {"action": "open_file", "filename": "string"}: Opens a file from the file system.
+13. {"action": "save_active_file", "filename": "string"}: Saves the content of the currently active window with the given filename.
+14. {"action": "delete_file", "filename": "string"}: Deletes a file from the file system.
+15. {"action": "drag_window", "selector": "#window-id", "x": number, "y": number}: Drags a window to a new position on the desktop. The coordinates are relative to the top-left of the desktop.
+Example Task: "Make the document window fullscreen."
+Assuming desktop state shows: Open Windows: - Window ID: #window-docs-12345, Title: "📝 New Document", Maximized: false
+{ "sequence": [
+    {"action": "speak", "text": "Okay, I'll make the document window fullscreen."},
+    {"action": "move_mouse_to_element", "selector": "#window-docs-12345 .maximize-btn"},
+    {"action": "click"}
+]}`;
+const responseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    sequence: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          action: { type: Type.STRING },
+          text: { type: Type.STRING, nullable: true },
+          selector: { type: Type.STRING, nullable: true },
+          query: { type: Type.STRING, nullable: true },
+          prompt: { type: Type.STRING, nullable: true },
+          filename: { type: Type.STRING, nullable: true },
+          enter: { type: Type.BOOLEAN, nullable: true },
+          pixels: { type: Type.NUMBER, nullable: true },
+          x: { type: Type.NUMBER, nullable: true },
+          y: { type: Type.NUMBER, nullable: true },
+          lines: {
+            type: Type.ARRAY,
+            nullable: true,
+            items: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.NUMBER,
+                },
+              },
+            },
+          },
+        },
+      },
     },
+  },
+  required: ["sequence"],
+};
 
-    // Auth
-    signup: (username: string, password: string) => apiClient.request('/api/signup', { method: 'POST', body: JSON.stringify({ username, password }) }),
-    login: (username: string, password: string) => apiClient.request('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-    
-    // Files
-    getFiles: () => apiClient.request('/api/files'),
-    saveFile: (type: string, name: string, content: string) => apiClient.request('/api/files', { method: 'POST', body: JSON.stringify({ type, name, content }) }),
-    deleteFile: (type: string, name: string) => apiClient.request(`/api/files/${type}/${name}`, { method: 'DELETE' }),
-    
-    // Sessions
-    getSessions: () => apiClient.request('/api/sessions'),
-    saveSession: (state: any) => apiClient.request('/api/sessions', { method: 'POST', body: JSON.stringify(state) }),
-    loadSession: (sessionId: string) => apiClient.request(`/api/sessions/${sessionId}`),
-    deleteSession: (sessionId: string) => apiClient.request(`/api/sessions/${sessionId}`, { method: 'DELETE' }),
+// --- Local Storage Client ---
+const DB_KEY = 'ai_workstation_data';
 
-    // Storage
-    getStorageUsage: () => apiClient.request('/api/storage'),
+const getDatabase = () => {
+    const defaultDb = {
+        files: { documents: {} as Record<string, { content: string, modified: number }>, images: {} as Record<string, { content: string, modified: number }> },
+        sessions: {} as Record<string, any>,
+    };
+    try {
+        const stored = localStorage.getItem(DB_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Basic validation to prevent loading corrupted data
+            if (parsed.files && parsed.sessions) {
+                return parsed;
+            }
+        }
+        return defaultDb;
+    } catch (e) {
+        console.error("Error reading from localStorage:", e);
+        return defaultDb; // Return a clean slate if parsing fails
+    }
+};
 
-    // AI Methods
-    chat: (prompt: string) => apiClient.request('/api/ai/chat', { method: 'POST', body: JSON.stringify({ prompt }) }),
-    generateImage: (prompt: string) => apiClient.request('/api/ai/generate-image', { method: 'POST', body: JSON.stringify({ prompt }) }),
-    googleSearch: (query: string) => apiClient.request('/api/ai/google-search', { method: 'POST', body: JSON.stringify({ query }) }),
+const saveDatabase = (db: any) => {
+    try {
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+    } catch (e) {
+        console.error("Error writing to localStorage:", e);
+        showToast("Error: Could not save data. Storage might be full.");
+    }
 };
 
 // --- DOM Elements ---
-// ... (omitted for brevity, no changes from previous version)
 const appContainer = document.getElementById('app-container')!;
 const chatHistory = document.getElementById('chat-history')!;
 const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
 const sendButton = document.getElementById('send-button') as HTMLButtonElement;
-const welcomeMessage = document.getElementById('welcome-message')!;
+const appTitle = document.getElementById('app-title')!;
 const desktop = document.getElementById('desktop')!;
 const cursor = document.getElementById('cursor')!;
 cursor.style.left = '100px';
@@ -72,21 +132,9 @@ const iconStudio = document.getElementById('icon-studio')!;
 const iconExplorer = document.getElementById('icon-explorer')!;
 const saveButton = document.getElementById('save-button') as HTMLButtonElement;
 const loadButton = document.getElementById('load-button') as HTMLButtonElement;
-const logoutButton = document.getElementById('logout-button') as HTMLButtonElement;
 const loadSessionModal = document.getElementById('load-session-modal')!;
 const closeModalBtn = document.getElementById('close-modal-btn')!;
 const savedSessionsList = document.getElementById('saved-sessions-list')!;
-const authModal = document.getElementById('auth-modal')!;
-const loginForm = document.getElementById('login-form') as HTMLFormElement;
-const signupForm = document.getElementById('signup-form') as HTMLFormElement;
-const loginUsernameInput = document.getElementById('login-username') as HTMLInputElement;
-const loginPasswordInput = document.getElementById('login-password') as HTMLInputElement;
-const signupUsernameInput = document.getElementById('signup-username') as HTMLInputElement;
-const signupPasswordInput = document.getElementById('signup-password') as HTMLInputElement;
-const loginError = document.getElementById('login-error')!;
-const signupError = document.getElementById('signup-error')!;
-const authTabs = document.querySelectorAll('.auth-tab');
-const authForms = document.querySelectorAll('.auth-form');
 const storageBarInner = document.getElementById('storage-bar-inner')!;
 const storageText = document.getElementById('storage-text')!;
 const testingModeIndicator = document.getElementById('testing-mode-indicator')!;
@@ -104,7 +152,6 @@ let openWindows: Map<string, HTMLElement> = new Map();
 let openFiles = new Map<HTMLElement, { type: 'docs' | 'doodle' | 'studio', name: string }>();
 const browserState = new Map<HTMLElement, { query: string, sources: any[], summary: string }>();
 let clipboard: { type: string, data: string } | null = null;
-let currentUser: { username: string } | null = null;
 const MAX_STORAGE = 10 * 1024 * 1024; // This is now just a frontend display constant
 let isTestingMode = false;
 
@@ -153,15 +200,9 @@ const formatBytes = (bytes: number): string => {
 };
 
 const updateStorageIndicator = async () => {
-    if (!currentUser) {
-        storageBarInner.style.width = `0%`;
-        storageText.textContent = ``;
-        return;
-    }
-
     try {
-        const response = await apiClient.getStorageUsage();
-        const { used } = await response.json();
+        const dbString = localStorage.getItem(DB_KEY) || '';
+        const used = new Blob([dbString]).size;
         const percentage = (used / MAX_STORAGE) * 100;
 
         storageBarInner.style.width = `${percentage}%`;
@@ -180,7 +221,7 @@ const updateStorageIndicator = async () => {
     }
 };
 
-// --- Authentication & App Initialization ---
+// --- App Initialization ---
 
 const initializeAppState = () => {
     openWindows.forEach(win => win.remove());
@@ -190,107 +231,16 @@ const initializeAppState = () => {
     activeWindow = null;
     windowZIndex = 10;
     chatHistory.innerHTML = '';
-    addMessage('assistant', `Hello, ${currentUser?.username}! I'm your AI assistant. What can I help you with today?`);
+    addMessage('assistant', `Hello! I'm your AI assistant. What can I help you with today?`);
+    if(aiInitializationError) {
+        addMessage('assistant', `Warning: AI service failed to initialize. Error: ${aiInitializationError}`);
+    }
     cursor.style.left = '100px';
     cursor.style.top = '100px';
     clipboard = null;
     disableTestingMode();
-};
-
-const loginUser = (username: string) => {
-    currentUser = { username };
-    sessionStorage.setItem('currentUser', username);
-    
-    authModal.style.display = 'none';
-    appContainer.classList.remove('hidden');
-    
-    welcomeMessage.textContent = `Welcome, ${username}!`;
-    initializeAppState();
     updateStorageIndicator();
 };
-
-const logoutUser = () => {
-    sessionStorage.removeItem('currentUser');
-    currentUser = null;
-
-    appContainer.classList.add('hidden');
-    authModal.style.display = 'flex';
-
-    loginForm.reset();
-    signupForm.reset();
-    switchAuthTab('login');
-    updateStorageIndicator();
-    disableTestingMode();
-};
-
-const switchAuthTab = (tab: 'login' | 'signup') => {
-    authTabs.forEach(t => t.classList.toggle('active', (t as HTMLElement).dataset.tab === tab));
-    authForms.forEach(f => f.classList.toggle('active', f.id.startsWith(tab)));
-    loginError.textContent = '';
-    signupError.textContent = '';
-};
-
-const validatePassword = (password: string): boolean => {
-    const re = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    return re.test(password);
-};
-
-const checkSession = () => {
-    const savedUser = sessionStorage.getItem('currentUser');
-    if (savedUser) {
-        loginUser(savedUser);
-    }
-};
-
-authTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        switchAuthTab((tab as HTMLElement).dataset.tab as 'login' | 'signup');
-    });
-});
-
-logoutButton.addEventListener('click', logoutUser);
-
-signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    signupError.textContent = '';
-    const username = signupUsernameInput.value.trim();
-    const password = signupPasswordInput.value.trim();
-
-    if (!username || !password) {
-        signupError.textContent = 'Please fill out all fields.';
-        return;
-    }
-    if (!validatePassword(password)) {
-        signupError.textContent = 'Password does not meet requirements.';
-        return;
-    }
-
-    try {
-        await apiClient.signup(username, password);
-        loginUser(username);
-    } catch (error) {
-        signupError.textContent = (error as Error).message;
-    }
-});
-
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    loginError.textContent = '';
-    const username = loginUsernameInput.value.trim();
-    const password = loginPasswordInput.value.trim();
-
-    if (!username || !password) {
-        loginError.textContent = 'Please fill out all fields.';
-        return;
-    }
-
-    try {
-        await apiClient.login(username, password);
-        loginUser(username);
-    } catch (error) {
-        loginError.textContent = (error as Error).message;
-    }
-});
 
 const getDesktopState = (): string => {
     const desktopRect = desktop.getBoundingClientRect();
@@ -335,10 +285,21 @@ const handleUserInput = async () => {
   const thinkingMessage = addMessage('assistant', 'Thinking...', true);
   sendButton.disabled = true;
   try {
+    if (aiInitializationError) {
+        throw new Error(`AI Service is unavailable: ${aiInitializationError}`);
+    }
     const desktopState = getDesktopState();
     const fullPrompt = `DESKTOP STATE:\n${desktopState}\n\nUSER REQUEST:\n${prompt}`;
-    const response = await apiClient.chat(fullPrompt);
-    const { decision: decisionText } = await response.json();
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: fullPrompt,
+        config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema,
+        }
+    });
+    const decisionText = response.text;
     const decision = JSON.parse(decisionText);
     thinkingMessage.remove();
     if (decision.sequence) {
@@ -349,7 +310,7 @@ const handleUserInput = async () => {
   } catch (error) {
     console.error("Error processing user input:", error);
     thinkingMessage.remove();
-    addMessage('assistant', "Sorry, I encountered an error. Please try again.");
+    addMessage('assistant', `Sorry, I encountered an error: ${(error as Error).message}`);
   } finally {
     sendButton.disabled = false;
   }
@@ -587,8 +548,12 @@ const executeActionSequence = async (sequence: any[]) => {
                 break;
             case 'find_image':
                 try {
-                    const response = await apiClient.generateImage(action.prompt);
-                    const { base64ImageBytes } = await response.json();
+                    const response = await ai.models.generateImages({
+                        model: 'imagen-4.0-generate-001',
+                        prompt: action.prompt,
+                        config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
+                    });
+                    const base64ImageBytes = response.generatedImages?.[0]?.image.imageBytes || null;
                     if (base64ImageBytes) {
                         const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
                         clipboard = { type: 'image', data: imageUrl };
@@ -764,8 +729,14 @@ const openBrowser = () => {
         if (!query) return;
         browserContent.innerHTML = `<div class="placeholder"><div class="spinner"></div>Searching for "${query}"...</div>`;
         try {
-            const response = await apiClient.googleSearch(query);
-            const { summary, sources } = await response.json();
+            if (aiInitializationError) throw new Error(aiInitializationError);
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: `Summarize information about "${query}" from the web.`,
+                config: { tools: [{ googleSearch: {} }] },
+            });
+            const summary = response.text;
+            const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
             browserState.set(windowEl, { query, sources, summary });
             renderSearchResults(windowEl);
         } catch (error) {
@@ -860,7 +831,7 @@ const useDoodlePad = async (lines: [number, number][][]) => {
         }
     }
 };
-const openDoodlePad = (file: { name: string, content: string } | null = null) => {
+const openDoodlePad = (file: { name: string, content: string } | null = null): HTMLElement => {
     if (file) {
         for (const [win, fileInfo] of openFiles.entries()) {
             if (fileInfo.type === 'doodle' && fileInfo.name === file.name) {
@@ -881,7 +852,7 @@ const openDoodlePad = (file: { name: string, content: string } | null = null) =>
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
-    if (file) {
+    if (file && file.content) {
         const img = new Image();
         img.onload = () => ctx.drawImage(img, 0, 0);
         img.src = file.content;
@@ -938,8 +909,13 @@ const useImageStudio = async (prompt: string) => {
     promptDisplay.textContent = `Prompt: "${prompt}"`;
     imageContainer.innerHTML = `<div class="spinner"></div><p>Generating image...</p>`;
     try {
-        const response = await apiClient.generateImage(prompt);
-        const { base64ImageBytes } = await response.json();
+        if (aiInitializationError) throw new Error(aiInitializationError);
+        const response = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: prompt,
+            config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
+        });
+        const base64ImageBytes = response.generatedImages?.[0]?.image.imageBytes || null;
 
         if (base64ImageBytes) {
             const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
@@ -954,7 +930,7 @@ const useImageStudio = async (prompt: string) => {
         imageContainer.innerHTML = `<p class="error">An error occurred during image generation.</p>`;
     }
 };
-const openImageStudio = () => {
+const openImageStudio = (): HTMLElement => {
     if(openWindows.has('studio')) {
         setActiveWindow(openWindows.get('studio')!);
         return openWindows.get('studio')!;
@@ -1241,41 +1217,35 @@ const showToast = (message: string) => {
     }, 3000);
 };
 
-// --- File & Session Management (Server-backed) ---
+// --- File & Session Management (localStorage-backed) ---
 
 const getFiles = async () => {
-    if (!currentUser) return { documents: {}, images: {} };
-    try {
-        const response = await apiClient.getFiles();
-        return await response.json();
-    } catch (error) {
-        console.error("Error getting files:", error);
-        showToast(`Could not load files: ${(error as Error).message}`);
-        return { documents: {}, images: {} };
-    }
+    return Promise.resolve(getDatabase().files);
 };
 
 const saveFile = async (type: 'documents' | 'images', name: string, content: string) => {
-    if (!currentUser) {
-        showToast("You must be logged in to save files.");
-        return;
-    }
     try {
-        await apiClient.saveFile(type, name, content);
+        const db = getDatabase();
+        db.files[type][name] = { content, modified: Date.now() };
+        saveDatabase(db);
         showToast(`Saved as ${name}`);
         addMessage('assistant', `Saved ${type.slice(0, -1)} as "${name}"`);
         updateStorageIndicator();
     } catch (error) {
+        const errorMessage = (error as Error).message;
         console.error("Error saving file:", error);
-        showToast(`Could not save file: ${(error as Error).message}`);
-        addMessage('assistant', `I couldn't save "${name}": ${(error as Error).message}`);
+        showToast(`Could not save file: ${errorMessage}`);
+        addMessage('assistant', `I couldn't save "${name}": ${errorMessage}`);
     }
 };
 
 const deleteFile = async (type: string, name: string) => {
-    if (!currentUser) return;
     try {
-        await apiClient.deleteFile(type, name);
+        const db = getDatabase();
+        if (type === 'documents' || type === 'images') {
+             delete db.files[type][name];
+        }
+        saveDatabase(db);
         showToast(`Deleted ${name}`);
         addMessage('assistant', `Deleted ${type.slice(0, -1)}: "${name}"`);
         updateStorageIndicator();
@@ -1286,13 +1256,19 @@ const deleteFile = async (type: string, name: string) => {
 };
 
 const saveSession = async () => {
-    if (!currentUser) {
-        showToast("You must be logged in to save sessions.");
-        return;
-    }
     const state = {
         openWindows: Array.from(openWindows.entries()).map(([key, win]) => {
             const body = win.querySelector('.window-body')!;
+            let content = body.innerHTML; // Default content is the innerHTML
+
+            // Special handling for doodle pad to save canvas content
+            if (win.dataset.app === 'doodle') {
+                const canvas = win.querySelector('canvas');
+                if (canvas) {
+                    content = canvas.toDataURL(); // Save the drawing as a base64 image string
+                }
+            }
+
             return {
                 key,
                 app: win.dataset.app,
@@ -1301,7 +1277,7 @@ const saveSession = async () => {
                 top: win.style.top,
                 width: win.style.width,
                 height: win.style.height,
-                content: body.innerHTML,
+                content: content, // This will be either HTML or a dataURL for the canvas
                 fileInfo: openFiles.get(win),
                 browserState: browserState.get(win)
             };
@@ -1309,7 +1285,10 @@ const saveSession = async () => {
         chatHistory: chatHistory.innerHTML,
     };
     try {
-        await apiClient.saveSession(state);
+        const db = getDatabase();
+        const sessionId = `session_${Date.now()}`;
+        db.sessions[sessionId] = state;
+        saveDatabase(db);
         showToast("Session saved!");
     } catch (error) {
         console.error("Error saving session:", error);
@@ -1319,8 +1298,9 @@ const saveSession = async () => {
 
 const loadSession = async (sessionId: string) => {
     try {
-        const response = await apiClient.loadSession(sessionId);
-        const state = await response.json();
+        const db = getDatabase();
+        const state = db.sessions[sessionId];
+        if (!state) throw new Error("Session not found in local storage.");
         
         initializeAppState();
         chatHistory.innerHTML = state.chatHistory || '';
@@ -1335,7 +1315,8 @@ const loadSession = async (sessionId: string) => {
                     } else {
                         openDocumentWriter();
                     }
-                    windowEl = Array.from(openWindows.values()).pop();
+                    // This is brittle, but there's no easy way to get the window created by openDocumentWriter
+                    windowEl = Array.from(openWindows.values()).pop(); 
                     if (windowEl) windowEl.querySelector('.window-body')!.innerHTML = winData.content;
                     break;
                 case 'browser':
@@ -1349,10 +1330,19 @@ const loadSession = async (sessionId: string) => {
                     }
                     break;
                 case 'doodle':
-                     if(winData.fileInfo) {
-                        openDoodlePad({name: winData.fileInfo.name, content: winData.content.match(/src="([^"]+)"/)?.[1] || ''});
-                    } else {
-                        openDoodlePad();
+                    windowEl = openDoodlePad(); // Create the window first
+                    if (winData.fileInfo) {
+                        // It's a saved file, update title and state
+                        openFiles.set(windowEl, winData.fileInfo);
+                        windowEl.querySelector('.window-title')!.textContent = `🎨 ${winData.fileInfo.name}`;
+                    }
+                    // Whether saved or not, draw the content from the session
+                    const canvas = windowEl.querySelector('canvas');
+                    const ctx = canvas?.getContext('2d');
+                    if (canvas && ctx && winData.content.startsWith('data:image/png')) {
+                        const img = new Image();
+                        img.onload = () => ctx.drawImage(img, 0, 0);
+                        img.src = winData.content; // Load the drawing from dataURL
                     }
                     break;
                 case 'studio':
@@ -1366,6 +1356,7 @@ const loadSession = async (sessionId: string) => {
                     break;
                  case 'explorer':
                     openFileExplorer();
+                    windowEl = openWindows.get('explorer');
                     break;
             }
             if (windowEl) {
@@ -1373,7 +1364,8 @@ const loadSession = async (sessionId: string) => {
                 windowEl.style.top = winData.top;
                 windowEl.style.width = winData.width;
                 windowEl.style.height = winData.height;
-                if(winData.fileInfo) openFiles.set(windowEl, winData.fileInfo);
+                // fileInfo is already set for doodle, this might override. Let's keep it generic.
+                if(winData.fileInfo && !openFiles.has(windowEl)) openFiles.set(windowEl, winData.fileInfo);
             }
         });
         
@@ -1386,9 +1378,10 @@ const loadSession = async (sessionId: string) => {
 };
 
 const deleteSession = async (sessionId: string) => {
-    if (!currentUser) return;
     try {
-        await apiClient.deleteSession(sessionId);
+        const db = getDatabase();
+        delete db.sessions[sessionId];
+        saveDatabase(db);
         await renderLoadSessionModal();
     } catch (error) {
         console.error("Error deleting session:", error);
@@ -1398,8 +1391,8 @@ const deleteSession = async (sessionId: string) => {
 
 const renderLoadSessionModal = async () => {
     try {
-        const response = await apiClient.getSessions();
-        const sessions = await response.json();
+        const db = getDatabase();
+        const sessions = db.sessions;
         const sortedSessions = Object.entries(sessions).sort((a, b) => {
             return parseInt(b[0].split('_')[1]) - parseInt(a[0].split('_')[1]);
         });
@@ -1461,19 +1454,19 @@ savedSessionsList.addEventListener('click', async (e) => {
         }
     }
 });
-let welcomeClickCount = 0;
-let welcomeClickTimer: number | null = null;
-welcomeMessage.addEventListener('click', () => {
-    welcomeClickCount++;
-    if (welcomeClickTimer) {
-        clearTimeout(welcomeClickTimer);
+let titleClickCount = 0;
+let titleClickTimer: number | null = null;
+appTitle.addEventListener('click', () => {
+    titleClickCount++;
+    if (titleClickTimer) {
+        clearTimeout(titleClickTimer);
     }
-    welcomeClickTimer = window.setTimeout(() => {
-        welcomeClickCount = 0;
+    titleClickTimer = window.setTimeout(() => {
+        titleClickCount = 0;
     }, 2000);
-    if (welcomeClickCount === 5) {
-        welcomeClickCount = 0;
-        if (welcomeClickTimer) clearTimeout(welcomeClickTimer);
+    if (titleClickCount === 5) {
+        titleClickCount = 0;
+        if (titleClickTimer) clearTimeout(titleClickTimer);
         promptForTestingMode();
     }
 });
@@ -1490,5 +1483,5 @@ closeDebugConsoleBtn.addEventListener('click', () => {
 // Make debug console draggable
 makeDraggable(debugConsole);
 
-// Run session check on page load
-checkSession();
+// Initialize the app on page load
+initializeAppState();
