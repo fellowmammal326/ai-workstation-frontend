@@ -7,6 +7,7 @@
     --accent-primary: #61dafb;
     --accent-secondary: #9575cd;
     --error-color: #ff5f56;
+    --success-color: #27c93f;
     --font-primary: 'Space Grotesk', sans-serif;
     --font-secondary: 'Roboto Mono', monospace;
 }
@@ -309,11 +310,14 @@ html, body {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
-    resize: both;
     overflow: hidden;
     min-width: 300px;
     min-height: 200px;
     transition: width 0.3s ease-in-out, height 0.3s ease-in-out, top 0.3s ease-in-out, left 0.3s ease-in-out, border-radius 0.3s ease-in-out;
+}
+
+.app-window.hidden {
+    display: none;
 }
 
 .app-window.maximized {
@@ -1102,6 +1106,82 @@ body.testing-mode #cursor {
 }
 body.testing-mode #chat-input-container {
     opacity: 0.6;
+}
+
+/* Debug Tool Styles */
+#debug-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    background-color: var(--accent-secondary);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10001;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+#debug-button:hover {
+    transform: scale(1.1);
+    background-color: #8d6acb;
+}
+#debug-console .window-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+.debug-controls {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--bg-tertiary);
+}
+.debug-controls button {
+    background-color: var(--accent-primary);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    width: 100%;
+}
+.debug-controls button:disabled {
+    background-color: var(--bg-tertiary);
+    cursor: not-allowed;
+}
+#diagnostics-output {
+    padding: 0.75rem;
+    flex-grow: 1;
+    overflow-y: auto;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+#diagnostics-output p {
+    margin-bottom: 0.5rem;
+    word-break: break-word;
+}
+#diagnostics-output p.success {
+    color: var(--success-color);
+}
+#diagnostics-output p.error {
+    color: var(--error-color);
+}
+#diagnostics-output p.info {
+    color: var(--text-secondary);
+}
+#diagnostics-output code {
+    background-color: var(--bg-primary);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.8rem;
 }
 
 

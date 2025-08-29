@@ -1,8 +1,7 @@
-
-
-
-// FIX: Use `import = require()` syntax for Express to ensure correct type resolution with CommonJS modules.
-import express = require('express');
+// FIX: The `import = require()` syntax for Express is not compatible with the current module system.
+// It has been replaced with the standard ES module import `import express from 'express'`, and explicit types
+// `Request`, `Response`, and `NextFunction` are imported to resolve type errors throughout the file.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
 
@@ -19,12 +18,23 @@ app.use(cors());
 // Increase the limit to 10MB to allow for larger image/session saves.
 app.use(express.json({ limit: '10mb' }));
 
-// === Gemini AI Initialization ===
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set in server environment");
+// === Gemini AI Initialization (Robust) ===
+let ai: GoogleGenAI | null = null;
+let aiInitializationError: string | null = null;
+
+try {
+    const API_KEY = process.env.API_KEY;
+    if (!API_KEY) {
+      throw new Error("API_KEY environment variable not set in server environment");
+    }
+    ai = new GoogleGenAI({ apiKey: API_KEY });
+    console.log("Gemini AI initialized successfully.");
+} catch (e: any) {
+    aiInitializationError = e.message;
+    console.error("!!! GEMINI AI INITIALIZATION FAILED !!!");
+    console.error(aiInitializationError);
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+
 
 // Constants for AI interaction, moved from the frontend
 const systemInstruction = `You are an AI assistant with a virtual workstation. You can control a virtual mouse cursor to interact with applications on the desktop.
@@ -110,11 +120,24 @@ const userData: {
     }
 } = {};
 
+// === Public Routes (No Auth Required) ===
+
+// Health Check Endpoint
+app.get('/api/health', (req: Request, res: Response) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        aiStatus: aiInitializationError ? 'error' : 'ok',
+        aiError: aiInitializationError,
+    });
+});
+
+
 // === Middleware to get user from header (INSECURE DEMO) ===
 // In a real app, you would use JWTs or a proper session middleware.
 // This is a simple, insecure way to identify the user for the demo.
 // FIX: Use explicit types from the imported express module for request, response, and next function.
-const getUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const getUser = (req: Request, res: Response, next: NextFunction) => {
     // Allow signup and login routes to pass through without the header
     if (req.path === '/api/signup' || req.path === '/api/login') {
         return next();
@@ -136,7 +159,7 @@ app.use(getUser);
 // --- Auth Routes ---
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/signup', (req: express.Request, res: express.Response) => {
+app.post('/api/signup', (req: Request, res: Response) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ message: 'Username and password are required.' });
@@ -155,7 +178,7 @@ app.post('/api/signup', (req: express.Request, res: express.Response) => {
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/login', (req: express.Request, res: express.Response) => {
+app.post('/api/login', (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
@@ -172,13 +195,13 @@ app.post('/api/login', (req: express.Request, res: express.Response) => {
 // --- File Routes ---
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.get('/api/files', (req: express.Request, res: express.Response) => {
+app.get('/api/files', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     res.json(userData[username].files);
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/files', (req: express.Request, res: express.Response) => {
+app.post('/api/files', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { type, name, content } = req.body as { type: 'documents' | 'images', name: string, content: string };
     if (!['documents', 'images'].includes(type) || !name || content === undefined) {
@@ -190,7 +213,7 @@ app.post('/api/files', (req: express.Request, res: express.Response) => {
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.delete('/api/files/:type/:name', (req: express.Request, res: express.Response) => {
+app.delete('/api/files/:type/:name', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { type, name } = req.params;
     if (type !== 'documents' && type !== 'images') {
@@ -207,13 +230,13 @@ app.delete('/api/files/:type/:name', (req: express.Request, res: express.Respons
 // --- Session Routes ---
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.get('/api/sessions', (req: express.Request, res: express.Response) => {
+app.get('/api/sessions', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     res.json(userData[username].sessions);
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/sessions', (req: express.Request, res: express.Response) => {
+app.post('/api/sessions', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const sessionState = req.body;
     const sessionId = `session_${Date.now()}`;
@@ -223,7 +246,7 @@ app.post('/api/sessions', (req: express.Request, res: express.Response) => {
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.get('/api/sessions/:id', (req: express.Request, res: express.Response) => {
+app.get('/api/sessions/:id', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { id } = req.params;
     const session = userData[username].sessions[id];
@@ -234,7 +257,7 @@ app.get('/api/sessions/:id', (req: express.Request, res: express.Response) => {
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.delete('/api/sessions/:id', (req: express.Request, res: express.Response) => {
+app.delete('/api/sessions/:id', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     const { id } = req.params;
     if (!userData[username].sessions[id]) {
@@ -248,7 +271,7 @@ app.delete('/api/sessions/:id', (req: express.Request, res: express.Response) =>
 // --- Storage Route ---
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.get('/api/storage', (req: express.Request, res: express.Response) => {
+app.get('/api/storage', (req: Request, res: Response) => {
     const { username } = (req as any).user;
     // This is an approximation of storage size.
     const userStorageString = JSON.stringify({
@@ -260,15 +283,21 @@ app.get('/api/storage', (req: express.Request, res: express.Response) => {
 });
 
 // --- AI Routes (Secure Backend) ---
+const checkAiService = (req: Request, res: Response, next: NextFunction) => {
+    if (!ai) {
+        return res.status(503).json({ message: `AI service is unavailable. Server-side error: ${aiInitializationError}` });
+    }
+    next();
+};
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/ai/chat', async (req: express.Request, res: express.Response) => {
+app.post('/api/ai/chat', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
             return res.status(400).json({ message: 'Prompt is required.' });
         }
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -285,13 +314,13 @@ app.post('/api/ai/chat', async (req: express.Request, res: express.Response) => 
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/ai/generate-image', async (req: express.Request, res: express.Response) => {
+app.post('/api/ai/generate-image', checkAiService, async (req: Request, res: Response) => {
     try {
         const { prompt } = req.body;
         if (!prompt) {
             return res.status(400).json({ message: 'Prompt is required.' });
         }
-        const response = await ai.models.generateImages({
+        const response = await ai!.models.generateImages({
             model: 'imagen-4.0-generate-001',
             prompt: prompt,
             config: { numberOfImages: 1, outputMimeType: 'image/jpeg' },
@@ -305,13 +334,13 @@ app.post('/api/ai/generate-image', async (req: express.Request, res: express.Res
 });
 
 // FIX: Use explicit types from the imported express module for request and response objects.
-app.post('/api/ai/google-search', async (req: express.Request, res: express.Response) => {
+app.post('/api/ai/google-search', checkAiService, async (req: Request, res: Response) => {
     try {
         const { query } = req.body;
         if (!query) {
             return res.status(400).json({ message: 'Query is required.' });
         }
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Summarize information about "${query}" from the web.`,
             config: { tools: [{ googleSearch: {} }] },

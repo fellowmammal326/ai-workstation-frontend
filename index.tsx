@@ -91,6 +91,14 @@ const storageBarInner = document.getElementById('storage-bar-inner')!;
 const storageText = document.getElementById('storage-text')!;
 const testingModeIndicator = document.getElementById('testing-mode-indicator')!;
 
+// Debug Tool Elements
+const debugButton = document.getElementById('debug-button')!;
+const debugConsole = document.getElementById('debug-console')!;
+const closeDebugConsoleBtn = document.getElementById('close-debug-console-btn')!;
+const runDiagnosticsBtn = document.getElementById('run-diagnostics-btn') as HTMLButtonElement;
+const diagnosticsOutput = document.getElementById('diagnostics-output')!;
+
+
 // --- State ---
 let windowZIndex = 10;
 let activeWindow: HTMLElement | null = null;
@@ -1200,6 +1208,7 @@ const makeDraggable = (el: HTMLElement) => {
     }
     function dragMouseDown(e: MouseEvent) {
         if ((e.target as HTMLElement).closest('button')) return;
+        if (el.classList.contains('maximized')) return;
         e.preventDefault();
         pos3 = e.clientX;
         pos4 = e.clientY;
@@ -1417,6 +1426,51 @@ const renderLoadSessionModal = async () => {
     }
 };
 
+// --- Debug Tool ---
+
+const runDiagnostics = async () => {
+    diagnosticsOutput.innerHTML = '';
+    const log = (message: string, isSuccess: boolean) => {
+        const status = isSuccess ? '✅ SUCCESS' : '❌ FAILED';
+        diagnosticsOutput.innerHTML += `<p class="${isSuccess ? 'success' : 'error'}">${status}: ${message}</p>`;
+    };
+
+    runDiagnosticsBtn.disabled = true;
+    diagnosticsOutput.innerHTML = '<p class="info">Running diagnostics...</p>';
+
+    // 1. Frontend Check
+    const isUrlCorrect = API_BASE_URL === 'http://localhost:10000';
+    log(`Frontend API_BASE_URL is set to <code>${API_BASE_URL}</code>.`, isUrlCorrect);
+    if (!isUrlCorrect) {
+        log('The API URL should be <code>http://localhost:10000</code> to match the server.', false);
+    }
+
+    // 2. Backend Connectivity & AI Status
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/health`);
+        if (!response.ok) {
+            throw new Error(`Server responded with status ${response.status}`);
+        }
+        const healthData = await response.json();
+        log('Backend server is reachable and responding.', true);
+
+        // 3. AI Status from backend
+        if (healthData.aiStatus === 'ok') {
+            log('Backend connection to Gemini AI is OK.', true);
+        } else {
+            log('Backend connection to Gemini AI has failed.', false);
+            log(`Server Error: <code>${healthData.aiError}</code>. This is the most likely cause of the "load failed" error. Please ensure the API_KEY is set correctly on the server.`, false);
+        }
+
+    } catch (error) {
+        log(`Backend server is not reachable at <code>${API_BASE_URL}/api/health</code>.`, false);
+        log(`Error: <code>${(error as Error).message}</code>`, false);
+        log('Please ensure the backend server is running on the correct port (10000) and that there are no network issues.', false);
+    } finally {
+        runDiagnosticsBtn.disabled = false;
+    }
+};
+
 // --- Event Listeners ---
 chatInput.addEventListener('input', () => {
     chatInput.style.height = 'auto';
@@ -1471,6 +1525,18 @@ welcomeMessage.addEventListener('click', () => {
     }
 });
 testingModeIndicator.addEventListener('click', disableTestingMode);
+debugButton.addEventListener('click', () => {
+    debugConsole.classList.remove('hidden');
+    // Ensure it's on top
+    debugConsole.style.zIndex = String(windowZIndex++);
+});
+closeDebugConsoleBtn.addEventListener('click', () => {
+    debugConsole.classList.add('hidden');
+});
+runDiagnosticsBtn.addEventListener('click', runDiagnostics);
+
+// Make debug console draggable
+makeDraggable(debugConsole);
 
 // Run session check on page load
 checkSession();

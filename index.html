@@ -122,6 +122,28 @@
         </div>
     </div>
 
+    <button id="debug-button" title="Open Debug Console">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 10.5h-5l-1-1h7zM10 16v-4M14 16v-4M18 8h-1a2 2 0 0 1-2-2V5a2 2 0 0 1-2-2h-4a2 2 0 0 1-2 2v1a2 2 0 0 1-2 2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2z"></path></svg>
+    </button>
+    
+    <div id="debug-console" class="app-window hidden" style="width: 450px; height: 350px; left: calc(50% - 225px); top: calc(50% - 175px); z-index: 9998; resize: both;">
+        <header class="window-header">
+            <span class="window-title">🐞 Debug Console</span>
+            <div class="window-controls">
+                <button id="close-debug-console-btn" class="close-btn" title="Close Console">&times;</button>
+            </div>
+        </header>
+        <div class="window-body">
+            <div class="debug-controls">
+                <button id="run-diagnostics-btn">Run Diagnostics</button>
+            </div>
+            <div id="diagnostics-output">
+                <p class="info">Click "Run Diagnostics" to check the connection to the backend server.</p>
+            </div>
+        </div>
+    </div>
+
+
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
