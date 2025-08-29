@@ -1527,8 +1527,8 @@ welcomeMessage.addEventListener('click', () => {
 testingModeIndicator.addEventListener('click', disableTestingMode);
 debugButton.addEventListener('click', () => {
     debugConsole.classList.remove('hidden');
-    // Ensure it's on top
-    debugConsole.style.zIndex = String(windowZIndex++);
+    // Ensure it's on top of all other UI, including modals
+    debugConsole.style.zIndex = '10002';
 });
 closeDebugConsoleBtn.addEventListener('click', () => {
     debugConsole.classList.add('hidden');
